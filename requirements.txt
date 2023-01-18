@@ -1,0 +1,7 @@
+torch
+torchvision
+cython
+scipy
+tqdm
+transformers
+prettytable
