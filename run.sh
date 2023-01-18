@@ -2,6 +2,7 @@
 
 PYTHON=python
 VENV_NAME=adetr_venv
+DATASET_DIR=dataset
 
 error_exit(){
     echo "$1" 1>&2
@@ -15,10 +16,17 @@ error_clean_exit(){
 }
 
 cd "`dirname \"$0\"`"
-if $PYTHON -c 'import sys; sys.exit(1 if sys.hexversion < 0x03000000 else 0)'; then
+if $PYTHON -c "import sys; sys.exit(1 if sys.hexversion < 0x03000000 else 0)"; then
     VENV=venv
 else
     error_exit "Python 2 is not supported. Please use Python 3."
+fi
+
+if [ ! -d $DATASET_DIR ]; then
+    echo extracting dataset...
+    unzip dataset.zip -d $DATASET_DIR || error_exit "Failed to extract dataset"
+    rm -rf $DATASET_DIR/__MACOSX
+    echo ""
 fi
 
 if [ ! -d $VENV_NAME ]; then
@@ -43,7 +51,7 @@ fi
 source $VENV_NAME/bin/activate || error_exit "Failed to source virtual environment (try to delete '$VENV_NAME/' and re-run)"
 
 echo Python version:
-$PYTHON -c 'import sys; print(sys.version)'
+$PYTHON -c "import sys; print(sys.version)"
 
 echo ""
 
