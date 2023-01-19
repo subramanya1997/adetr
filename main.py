@@ -11,5 +11,4 @@ if __name__ == '__main__':
     args = parse_arguments()
     # t_dataset = build_dataset(image_set="train", args=args)
     v_dataset = build_dataset(image_set="val", args=args)
-    print(v_dataset)
     print('---')
