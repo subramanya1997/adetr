@@ -2,7 +2,7 @@
 
 PYTHON=python
 VENV_NAME=adetr_venv
-DATASET_DIR=dataset
+DATASET_DIR=data
 
 error_exit(){
     echo "$1" 1>&2
@@ -55,8 +55,8 @@ $PYTHON -c "import sys; print(sys.version)"
 
 echo ""
 
-nvidia-smi
+nvidia-smi || echo "GPU not found"
 
 echo ""
 
-echo Starting the bot...
+$PYTHON main.py --config ./configs/vaw_attributes.yaml --mode train

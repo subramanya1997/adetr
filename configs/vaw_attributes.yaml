@@ -1,0 +1,3 @@
+vaw_imgs_dir: './'
+vaw_dataset_path: ./data
+vaw_dataset: True
