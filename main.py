@@ -6,9 +6,13 @@ import sys
 from argsparser import parse_arguments
 
 from datasets import build_dataset
+from utils.distributed import init_distributed_mode
+
+def main(args):
+    # initialize distributed mode
+    device_id = init_distributed_mode(args)
+    print(device_id)
 
 if __name__ == '__main__':
     args = parse_arguments()
-    # t_dataset = build_dataset(image_set="train", args=args)
-    v_dataset = build_dataset(image_set="val", args=args)
-    print('---')
+    main(args)

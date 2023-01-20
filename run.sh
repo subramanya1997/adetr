@@ -1,5 +1,41 @@
 #!/bin/bash
 
+#SBATCH --job-name=adetr
+#SBATCH -o /work/pi_hzhang2_umass_edu/snagabhushan_umass_edu/adetr/logs/sbatch_logs/sbatch_log.txt
+#SBATCH --time=10:00:00
+#SBATCH -c 1 # Cores
+#SBATCH --mem=128GB  # Requested Memory
+#SBATCH -p gpu-preempt  # Partition
+#SBATCH --gres gpu:2
+#SBATCH -G 2  # Number of GPUs
+
+# Help 
+Help()
+{
+    # Display Help
+    echo "This script is used to run the code on the cluster."
+    echo "Syntax: ./run.sh [-h]"
+    echo "options:"
+    echo "h            Print this Help."
+    echo "run_name     Name of the job."
+    echo "mode         Mode of the job. Can be train or test."
+}
+# variables
+RUN_NAME=default
+MODE=train
+
+# Options for the job
+while getopts hrun_name: option; do
+    case "${option}" in
+        h) Help
+            exit;;
+        run_name) run_name=${OPTARG};;
+        mode) MODE=${OPTARG};;
+        \?) echo "Invalid option: -$OPTARG" >&2
+            exit 1;;
+    esac
+done
+
 PYTHON=python
 VENV_NAME=adetr_venv
 DATASET_DIR=data
@@ -15,7 +51,6 @@ error_clean_exit(){
     error_exit "$1" 1>&2
 }
 
-cd "`dirname \"$0\"`"
 if $PYTHON -c "import sys; sys.exit(1 if sys.hexversion < 0x03000000 else 0)"; then
     VENV=venv
 else
@@ -24,7 +59,7 @@ fi
 
 if [ ! -d $DATASET_DIR ]; then
     echo extracting dataset...
-    unzip dataset.zip -d $DATASET_DIR || error_exit "Failed to extract dataset"
+    unzip ./dataset.zip -d $DATASET_DIR || error_exit "Failed to extract dataset"
     rm -rf $DATASET_DIR/__MACOSX
     echo ""
 fi
@@ -52,11 +87,13 @@ source $VENV_NAME/bin/activate || error_exit "Failed to source virtual environme
 
 echo Python version:
 $PYTHON -c "import sys; print(sys.version)"
-
 echo ""
-
 nvidia-smi || echo "GPU not found"
-
 echo ""
 
-$PYTHON main.py --config ./configs/vaw_attributes.yaml --mode train
+# master node
+export MASTER_ADDR=$(scontrol show hostname ${SLURM_NODELIST} | head -n 1)
+echo "MASTER_ADDR: $MASTER_ADDR"
+
+torchrun --nnodes=1 --nproc_per_node=2 --rdzv_id=100 --rdzv_backend=c10d --rdzv_endpoint=$MASTER_ADDR:29400 \
+main.py --run_name $RUN_NAME  --config ./configs/vaw_attributes.yaml --mode train > ./logs/$RUN_NAME/train_log.txt
