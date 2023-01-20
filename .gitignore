@@ -133,4 +133,4 @@ dmypy.json
 data/
 save/
 logs/*
-!logs/sbatch_logs/
+!logs/sbatch_logs/*
