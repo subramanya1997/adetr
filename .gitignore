@@ -134,3 +134,4 @@ data/
 save/
 logs/*
 !logs/sbatch_logs/*
+pretrained/*
