@@ -10,6 +10,56 @@ from torch.utils.data import Dataset
 
 import datasets.transforms as T
 
+class ConvertCocoPolysToMask(object):
+    def __init__(self, return_masks=False, return_tokens=False, tokenizer=None):
+        self.return_masks = return_masks
+        self.return_tokens = return_tokens
+        self.tokenizer = tokenizer
+
+    def __call__(self, image, target):
+        w, h = image.size
+        idx = target["id"]
+        image_id = target["image_id"]
+        image_id = torch.tensor([image_id])
+        caption = target["caption"] if "caption" in target else None
+
+        anno = target["instances"]
+        boxes = [obj["bbox"] for obj in anno]
+        # guard against no boxes via resizing
+        boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
+        boxes[:, 2:] += boxes[:, :2]
+        boxes[:, 0::2].clamp_(min=0, max=w)
+        boxes[:, 1::2].clamp_(min=0, max=h)
+
+        classes = [[att for att in obj["attributes"]] for obj in anno ]
+        max_classes_length = max([len(c) for c in classes])
+        classes = [c + [-100] * (max_classes_length - len(c)) for c in classes]
+        classes = torch.tensor(classes, dtype=torch.int64)
+
+        keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+        boxes = boxes[keep]
+        classes = classes[keep]
+        target = {}
+        target["boxes"] = boxes
+        target["labels"] = classes
+        if caption is not None:
+            target["caption"] = caption
+
+        target["image_id"] = image_id
+        target["id"] = idx
+
+        target["orig_size"] = torch.as_tensor([int(h), int(w)])
+        target["size"] = torch.as_tensor([int(h), int(w)])
+        return image, target
+
+def make_coco_transforms():
+    normalize = T.Compose([T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+    max_size = 1333
+    return T.Compose([
+            T.RandomResize([800], max_size=max_size),
+            normalize,
+        ]
+    )
 
 class VAW:
     def __init__(self, annotation_path=None):
@@ -28,7 +78,7 @@ class VAW:
         assert os.path.exists(annotation_path), f"annotation_path {annotation_path} does not exist"
 
         if annotation_path is not None:
-            print("Loading annotations...")
+            print("==> Loading annotations..")
 
             dataset = self._load_json(annotation_path)
             assert type(dataset) == dict, "annotation file format {} not supported".format(type(self.dataset))
@@ -39,7 +89,7 @@ class VAW:
             return json.load(f)
 
     def _create_index(self, dataset=None):
-        print("Creating index...")
+        print("==> Creating index..")
         for att in dataset["categories"]:
             self.atts[att["id"]] = att
             self.att_id_map[att["name"]] = att["id"]
@@ -143,11 +193,11 @@ class VAW:
     def __repr__(self):
         return f"VAW dataset with {len(self.imgs)} images, {len(self.atts)} attribute and {len(self.anns)} annotations"
 
-
 class VAWDataset(Dataset):
     def __init__(self, img_dir, ann_path, transforms=None):
         self.img_dir = img_dir
         self.vaw = VAW(annotation_path=ann_path)
+        print(f"==> {self.vaw}")
         self.ids = list(self.vaw.anns.keys())
         self.transforms = transforms
         self.prepare = ConvertCocoPolysToMask(return_masks=False)
@@ -160,63 +210,14 @@ class VAWDataset(Dataset):
         img, target = self.prepare(img, target)
         if self.transforms is not None:
             img, target = self.transforms(img, target)
-        return img_path, target
+        return img, target
 
     def __len__(self):
         return len(self.ids)
 
-class ConvertCocoPolysToMask(object):
-    def __init__(self, return_masks=False, return_tokens=False, tokenizer=None):
-        self.return_masks = return_masks
-        self.return_tokens = return_tokens
-        self.tokenizer = tokenizer
-
-    def __call__(self, image, target):
-        w, h = image.size
-        idx = target["id"]
-        image_id = target["image_id"]
-        image_id = torch.tensor([image_id])
-        caption = target["caption"] if "caption" in target else None
-
-        anno = target["instances"]
-        boxes = [obj["bbox"] for obj in anno]
-        # guard against no boxes via resizing
-        boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
-        boxes[:, 2:] += boxes[:, :2]
-        boxes[:, 0::2].clamp_(min=0, max=w)
-        boxes[:, 1::2].clamp_(min=0, max=h)
-
-        classes = [[att for att in obj["attributes"]] for obj in anno ]
-        max_classes_length = max([len(c) for c in classes])
-        classes = [c + [-100] * (max_classes_length - len(c)) for c in classes]
-        classes = torch.tensor(classes, dtype=torch.int64)
-
-        keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
-        boxes = boxes[keep]
-        classes = classes[keep]
-        target = {}
-        target["boxes"] = boxes
-        target["labels"] = classes
-        if caption is not None:
-            target["caption"] = caption
-        target["image_id"] = image_id
-        target["id"] = idx
-
-        target["orig_size"] = torch.as_tensor([int(h), int(w)])
-        target["size"] = torch.as_tensor([int(h), int(w)])
-        return image, target
-
-def make_coco_transforms():
-    normalize = T.Compose([T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
-    max_size = 1333
-    return T.Compose([
-            T.RandomResize([800], max_size=max_size),
-            normalize,
-        ]
-    )
-
 def build_vaw(image_set: str, args):
-    vaw_path = args.vaw_dataset_path
+    print(f"==> Building VAW dataset for {image_set} set")
+    vaw_path = args.dataset_path
     imgs_dir = args.vaw_imgs_dir
     assert os.path.exists(vaw_path), f"VAW dataset path {vaw_path} does not exist"
     dataset_path = os.path.join(vaw_path, f"final_{image_set}_data.json")
@@ -225,6 +226,4 @@ def build_vaw(image_set: str, args):
         ann_path=dataset_path, 
         transforms=make_coco_transforms()
     )
-    for i in tqdm(range(len(dataset)), desc=f"{image_set}"):
-        img_path, target = dataset[i]
     return dataset

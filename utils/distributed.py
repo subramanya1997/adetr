@@ -18,6 +18,8 @@ def init_distributed_mode(args):
     dist.init_process_group(backend="nccl")
     rank = dist.get_rank()
     device_id = rank % args.gpu_count
+    seed = args.seed + rank
     print(f"==> Rank {rank} is using GPU {device_id}")
+    print(f"==> Seed is {seed}")
 
-    return device_id
+    return device_id, seed, rank

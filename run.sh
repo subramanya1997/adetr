@@ -1,5 +1,4 @@
 #!/bin/bash
-
 #SBATCH --job-name=adetr
 #SBATCH -o /work/pi_hzhang2_umass_edu/snagabhushan_umass_edu/adetr/logs/sbatch_logs/sbatch_log.txt
 #SBATCH --time=10:00:00
@@ -88,7 +87,7 @@ source $VENV_NAME/bin/activate || error_exit "Failed to source virtual environme
 echo Python version:
 $PYTHON -c "import sys; print(sys.version)"
 echo ""
-nvidia-smi || echo "GPU not found"
+nvidia-smi || error_clean_exit "GPU not found"
 echo ""
 
 # master node
@@ -96,4 +95,5 @@ export MASTER_ADDR=$(scontrol show hostname ${SLURM_NODELIST} | head -n 1)
 echo "MASTER_ADDR: $MASTER_ADDR"
 
 torchrun --nnodes=1 --nproc_per_node=2 --rdzv_id=100 --rdzv_backend=c10d --rdzv_endpoint=$MASTER_ADDR:29400 \
-main.py --run_name $RUN_NAME  --config ./configs/vaw_attributes.yaml --mode train > ./logs/$RUN_NAME/train_log.txt
+main.py --run_name $RUN_NAME  --config ./configs/vaw_attributes.yaml --mode train \
+--load ./pretrained/pretrained_EB5_checkpoint.pth > ./logs/$RUN_NAME/train_log.txt
