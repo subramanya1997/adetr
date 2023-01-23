@@ -96,4 +96,4 @@ echo "MASTER_ADDR: $MASTER_ADDR"
 
 torchrun --nnodes=1 --nproc_per_node=2 --rdzv_id=100 --rdzv_backend=c10d --rdzv_endpoint=$MASTER_ADDR:29400 \
 main.py --run_name $RUN_NAME  --config ./configs/vaw_attributes.yaml --mode train \
---load ./pretrained/pretrained_EB5_checkpoint.pth > ./logs/$RUN_NAME/train_log.txt
+--load ./pretrained/pretrained_resnet101_checkpoint.pth > ./logs/$RUN_NAME/train_log.txt

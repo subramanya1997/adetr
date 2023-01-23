@@ -145,7 +145,7 @@ class TimmBackbone(nn.Module):
             replace_bn(backbone)
         num_channels = backbone.feature_info.channels()[-1]
         self.body = backbone
-        self.num_channels =  num_channels
+        self.num_channels = num_channels
         self.interm = return_interm_layers
         self.main_layer = main_layer
 
@@ -158,7 +158,6 @@ class TimmBackbone(nn.Module):
             mask = F.interpolate(tensor_list.mask[None].float(), size=x.shape[-2:]).bool()[0]
             out[f"layer{i}"] = NestedTensor(x, mask)
         return out
-
 
 class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):

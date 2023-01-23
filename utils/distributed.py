@@ -23,3 +23,19 @@ def init_distributed_mode(args):
     print(f"==> Seed is {seed}")
 
     return device_id, seed, rank
+
+def reduce_dict(input_dict, average=True):
+    world_size = dist.get_world_size()
+    with torch.no_grad():
+        names = []
+        values = []
+        for k, v in input_dict.items():
+            names.append(k)
+            values.append(v)
+        values = torch.stack(values, dim=0)
+        dist.reduce(values, dst=0)
+        if average:
+            values /= world_size
+        reduced_dict = {k: v for k, v in zip(names, values)}
+
+    return reduced_dict

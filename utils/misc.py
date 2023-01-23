@@ -73,6 +73,29 @@ def collate_fn(do_round, batch):
     final_batch = {}
     final_batch["samples"] = NestedTensor.from_tensor_list(batch[0], do_round)
     final_batch["targets"] = batch[1]
+    max_len = max([v["positive_map"].shape[1] for v in batch[1]])
+    nb_boxes = sum([v["positive_map"].shape[0] for v in batch[1]])
+    batched_pos_map = torch.zeros((nb_boxes, max_len), dtype=torch.bool)
+    cur_count = 0
+    for v in batch[1]:
+        cur_pos = v["positive_map"]
+        batched_pos_map[cur_count : cur_count + len(cur_pos), : cur_pos.shape[1]] = cur_pos
+        cur_count += len(cur_pos)
+
+    assert cur_count == len(batched_pos_map)
+    # assert batched_pos_map.sum().item() == sum([v["positive_map"].sum().item() for v in batch[1]])
+    final_batch["positive_map"] = batched_pos_map.float()
+    
+    max_len = max([v["positive_att"].shape[1] for v in batch[1]])
+    nb_boxes = sum([v["positive_att"].shape[0] for v in batch[1]])
+    batched_pos_att = torch.zeros((nb_boxes, max_len), dtype=torch.bool)
+    cur_count = 0
+    for v in batch[1]:
+        cur_pos = v["positive_att"]
+        batched_pos_att[cur_count : cur_count + len(cur_pos), : cur_pos.shape[1]] = cur_pos
+        cur_count += len(cur_pos)
+    assert cur_count == len(batched_pos_att)
+    final_batch["positive_att"] = batched_pos_att.float()
     return final_batch
 
 def targets_to(targets: List[Dict[str, Any]], device):
@@ -82,6 +105,7 @@ def targets_to(targets: List[Dict[str, Any]], device):
         "image_id",
         "id",
         "orig_size",
-        "size"
+        "size",
+        "tokens_positive"
     ]
     return [{k: v.to(device) if k not in excluded_keys else v for k, v in t.items()} for t in targets]

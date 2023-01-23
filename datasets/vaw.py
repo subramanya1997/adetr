@@ -7,8 +7,47 @@ from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
+from transformers import RobertaTokenizerFast
 
 import datasets.transforms as T
+
+def create_positive_map(tokenized, tokens_positive):
+    """construct a map such that positive_map[i,j] = True iff box i is associated to token j"""
+    positive_map = torch.zeros((len(tokens_positive), 256), dtype=torch.float)
+    for j, tok_list in enumerate(tokens_positive):
+        for (beg, end) in tok_list:
+            beg_pos = tokenized.char_to_token(beg)
+            end_pos = tokenized.char_to_token(end - 1)
+            if beg_pos is None:
+                try:
+                    beg_pos = tokenized.char_to_token(beg + 1)
+                    if beg_pos is None:
+                        beg_pos = tokenized.char_to_token(beg + 2)
+                except:
+                    beg_pos = None
+            if end_pos is None:
+                try:
+                    end_pos = tokenized.char_to_token(end - 2)
+                    if end_pos is None:
+                        end_pos = tokenized.char_to_token(end - 3)
+                except:
+                    end_pos = None
+            if beg_pos is None or end_pos is None:
+                continue
+
+            assert beg_pos is not None and end_pos is not None
+            positive_map[j, beg_pos : end_pos + 1].fill_(1)
+    return positive_map / (positive_map.sum(-1)[:, None] + 1e-6)
+
+def create_positive_att_map(attributes):
+    positive_att_map = torch.zeros((len(attributes), 620), dtype=torch.float)
+    for j, att_list in enumerate(attributes):
+        for att in att_list:
+            if att == -100:
+                continue
+            positive_att_map[j, att].fill_(1)
+    return positive_att_map / (positive_att_map.sum(-1)[:, None] + 1e-6)
+
 
 class ConvertCocoPolysToMask(object):
     def __init__(self, return_masks=False, return_tokens=False, tokenizer=None):
@@ -31,25 +70,38 @@ class ConvertCocoPolysToMask(object):
         boxes[:, 0::2].clamp_(min=0, max=w)
         boxes[:, 1::2].clamp_(min=0, max=h)
 
-        classes = [[att for att in obj["attributes"]] for obj in anno ]
-        max_classes_length = max([len(c) for c in classes])
-        classes = [c + [-100] * (max_classes_length - len(c)) for c in classes]
+        classes = [0 for obj in anno]
         classes = torch.tensor(classes, dtype=torch.int64)
+
+        attributes = [[att for att in obj["attributes"]] for obj in anno]
+        max_attributes_length = max([len(c) for c in attributes])
+        attributes = [c + [-100] * (max_attributes_length - len(c)) for c in attributes]
+        attributes = torch.tensor(attributes, dtype=torch.int64)
+        if self.return_tokens:
+            tokens_positive = target["tokens_positive"]
 
         keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
         boxes = boxes[keep]
         classes = classes[keep]
+        attributes = attributes[keep]
+        
         target = {}
         target["boxes"] = boxes
         target["labels"] = classes
+        target["attributes"] = attributes
         if caption is not None:
             target["caption"] = caption
-
+        if tokens_positive is not None:
+            target["tokens_positive"] = [[tokens_positive] for _ in classes]
         target["image_id"] = image_id
         target["id"] = idx
-
         target["orig_size"] = torch.as_tensor([int(h), int(w)])
         target["size"] = torch.as_tensor([int(h), int(w)])
+
+        assert len(target["boxes"]) == len(target["tokens_positive"])
+        tokenized = self.tokenizer(caption, return_tensors="pt")
+        target["positive_map"] = create_positive_map(tokenized, target["tokens_positive"])
+        target["positive_att"] = create_positive_att_map(target["attributes"])
         return image, target
 
 def make_coco_transforms():
@@ -194,16 +246,19 @@ class VAW:
         return f"VAW dataset with {len(self.imgs)} images, {len(self.atts)} attribute and {len(self.anns)} annotations"
 
 class VAWDataset(Dataset):
-    def __init__(self, img_dir, ann_path, transforms=None):
+    def __init__(self, img_dir, ann_path, transforms=None, text_encoder_type=None):
         self.img_dir = img_dir
         self.vaw = VAW(annotation_path=ann_path)
         print(f"==> {self.vaw}")
         self.ids = list(self.vaw.anns.keys())
         self.transforms = transforms
-        self.prepare = ConvertCocoPolysToMask(return_masks=False)
+        tokenizer = RobertaTokenizerFast.from_pretrained(text_encoder_type)
+        self.prepare = ConvertCocoPolysToMask(return_masks=False, return_tokens=True, tokenizer=tokenizer)
     
     def __getitem__(self, idx):
         target = self.vaw.get_ann(ann_id=self.ids[idx])
+        caption_len = len(target["caption"])
+        target["tokens_positive"] = [0, caption_len]
         img_data = self.vaw.get_img(img_id=target["image_id"])
         img_path = os.path.join(self.img_dir, img_data['file_name'])
         img = Image.open(img_path).convert("RGB")
@@ -224,6 +279,7 @@ def build_vaw(image_set: str, args):
     assert os.path.exists(dataset_path), f"VAW dataset path {dataset_path} does not exist"
     dataset = VAWDataset(img_dir=imgs_dir, 
         ann_path=dataset_path, 
-        transforms=make_coco_transforms()
+        transforms=make_coco_transforms(),
+        text_encoder_type=args.text_encoder_type
     )
     return dataset

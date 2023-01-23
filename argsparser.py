@@ -27,8 +27,11 @@ def parse_arguments():
         help="Type of positional embedding to use on top of the image features",
     )
     ## backbone
-    parser.add_argument("--backbone", default="timm_tf_efficientnet_b5_ns", type=str,
+    parser.add_argument("--backbone", default="resnet101", type=str,
         help="Name of the convolutional backbone to use such as resnet50 resnet101 timm_tf_efficientnet_b3_ns",
+    )
+    parser.add_argument("--dilation", action="store_true",
+        help="If true, we replace stride with dilation in the last convolutional block (DC5)",
     )
     ## transformer
     parser.add_argument("--dim_feedforward", default=2048, type=int,
@@ -84,6 +87,11 @@ def parse_arguments():
     parser.add_argument("--no_aux_loss", dest="aux_loss", action="store_false",
         help="Disables auxiliary decoding losses (loss at each layer)",
     )
+    parser.add_argument(
+        "--set_loss", default="hungarian", type=str, 
+        choices=("sequential", "hungarian", "lexicographical"),
+        help="Type of matching to perform in the loss",
+    )
     parser.add_argument("--contrastive_loss", action="store_true", 
         help="Whether to add contrastive loss"
         )
@@ -93,6 +101,32 @@ def parse_arguments():
     parser.add_argument("--contrastive_loss_hdim", type=int, default=64,
         help="Projection head output size before computing normalized temperature-scaled cross entropy loss",
     )
+    parser.add_argument("--temperature_NCE", type=float, default=0.07, 
+        help="Temperature in the  temperature-scaled cross entropy loss"
+    )
+    ## matcher
+    parser.add_argument("--set_cost_class", default=1, type=float,
+        help="Class coefficient in the matching cost"
+    )
+    parser.add_argument("--set_cost_bbox", default=5, type=float,
+        help="L1 box coefficient in the matching cost"
+    )
+    parser.add_argument("--set_cost_giou", default=2, type=float,
+        help="giou box coefficient in the matching cost"
+    )
+
+    # Loss coefficients
+    parser.add_argument("--ce_loss_coef", default=1, type=float)
+    parser.add_argument("--attributes_loss_coef", default=1, type=float)
+    parser.add_argument("--mask_loss_coef", default=1, type=float)
+    parser.add_argument("--dice_loss_coef", default=1, type=float)
+    parser.add_argument("--bbox_loss_coef", default=5, type=float)
+    parser.add_argument("--giou_loss_coef", default=2, type=float)
+    parser.add_argument("--eos_coef", default=0.1, type=float,
+        help="Relative classification weight of the no-object class",
+    )
+    parser.add_argument("--contrastive_loss_coef", default=0.1, type=float)
+    parser.add_argument("--contrastive_align_loss_coef", default=1, type=float)
 
     try:
         args = parser.parse_args()
